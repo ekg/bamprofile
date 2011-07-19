@@ -289,7 +289,7 @@ int main(int argc, char** argv) {
     cout << "total gap bases:\t" << gapCount << endl;
     cout << "mismatch rate per aligned bp:\t" << (long double) mismatchCount / (long double) alignedBases << endl;
     cout << "gap rate per aligned bp:\t" << (long double) gapCount / (long double) alignedBases << endl;
-    cout << "difference per aligned bp:\t" << (long double) ( gapCount + mismatchCount ) / (long double) alignedBases << endl;
+    cout << "mismatch + gap per aligned bp:\t" << (long double) ( gapCount + mismatchCount ) / (long double) alignedBases << endl;
     cout << endl;
 
     cout << "mismatch length distribution" << endl;
@@ -304,7 +304,7 @@ int main(int argc, char** argv) {
     for (map<int, long unsigned int>::iterator p = gaps.begin(); p != gaps.end(); ++p) {
         cout << p->first << "\t" << p->second << "\t" << (long double) p->second / (long double) alignedBases << endl;
     }
-    cout << endl;
+    //cout << endl;
 
     return 0;
 
