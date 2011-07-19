@@ -1,2 +1,22 @@
+-- bamprofile --
+
+
+description:
+
 Estimates the error profile of alignments by counting mismatches and gaps
-relative to the number of aligned bases.
+relative to the number of aligned bases.  Generates a report which describes
+the distribution of mismatching blocks and gaps, as well as average rates of
+putative differences, average coverage of mapped reads, and other useful
+statistics.
+
+
+obtaining:
+
+This repository contains submodules, so use:
+
+    git clone --recursive ...
+
+to download.
+
+
+author: Erik Garrison <erik.garrison@bc.edu>
