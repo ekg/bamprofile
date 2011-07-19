@@ -1,0 +1,6 @@
+[submodule "bamtools"]
+	path = bamtools
+	url = git://github.com/pezmaster31/bamtools.git
+[submodule "fastahack"]
+	path = fastahack
+	url = git://github.com/ekg/fastahack.git

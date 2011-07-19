@@ -1,0 +1,2 @@
+Estimates the error profile of alignments by counting mismatches and gaps
+relative to the number of aligned bases.
