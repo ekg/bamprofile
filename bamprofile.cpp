@@ -8,9 +8,59 @@
 #include "api/BamWriter.h"
 #include "api/SamReadGroup.h"
 #include "fastahack/Fasta.h"
+#include <cmath>
 
 using namespace BamTools;
 using namespace std;
+
+#define PHRED_MAX 1000
+
+
+short qualityChar2ShortInt(char c) {
+    return static_cast<short>(c) - 33;
+}
+
+long double qualityChar2LongDouble(char c) {
+    return static_cast<long double>(c) - 33;
+}
+
+long double lnqualityChar2ShortInt(char c) {
+    return log(static_cast<short>(c) - 33);
+}
+
+char qualityInt2Char(short i) {
+    return static_cast<char>(i + 33);
+}
+
+long double ln2log10(long double prob) {
+    return M_LOG10E * prob;
+}
+
+long double log102ln(long double prob) {
+    return M_LN10 * prob;
+}
+
+long double phred2ln(int qual) {
+    return M_LN10 * qual * -.1;
+}
+
+long double ln2phred(long double prob) {
+    return -10 * M_LOG10E * prob;
+}
+
+long double phred2float(int qual) {
+    return pow(10, qual * -.1);
+}
+
+long double float2phred(long double prob) {
+    if (prob == 1)
+        return PHRED_MAX;  // guards against "-0"
+    long double p = -10 * (long double) log10(prob);
+    if (p < 0 || p > PHRED_MAX) // int overflow guard
+        return PHRED_MAX;
+    else
+        return p;
+}
 
 void printUsage(int argc, char** argv) {
 
@@ -18,13 +68,14 @@ void printUsage(int argc, char** argv) {
          << endl
          << "options:" << endl
          << "    -h, --help         this dialog" << endl
+         << "    -f, --fasta-reference FILE  the reference sequence" << endl
          << "    -b, --bam FILE     use this BAM as input (multiple allowed)" << endl
          << "    -r, --region REGION  limit alignments to those in this region (chr:start..end)" << endl
          << endl
          << "Generates reports on the rate of putative mutations or errors in the input alignment data." << endl
          << "Alignments are read from the specified files, or stdin if none are specified" << endl
          << endl
-         << "author: Erik Garrison <erik.garrison@bc.edu>" << endl;
+         << "author: Erik Garrison <erik.garrison@gmail.com>" << endl;
 
 }
 
@@ -191,10 +242,17 @@ int main(int argc, char** argv) {
     long unsigned int referenceBases = 0;
     unsigned int currentRefSeqID = 0;
 
+    map<short, uint64_t> qual_hist;
+
     BamAlignment al;
     while (reader.GetNextAlignment(al)) {
         if (al.IsMapped()) {
 
+            // record the qualities
+            for (string::iterator c = al.Qualities.begin(); c != al.Qualities.end(); ++c) {
+                ++qual_hist[qualityChar2ShortInt(*c)];
+            }
+            
             long unsigned int endpos = al.GetEndPosition();
             // this happens when we switch reference sequences
             if (currentRefSeqID != al.RefID) {
@@ -303,6 +361,13 @@ int main(int argc, char** argv) {
     cout << "length\tcount\trate (per aligned base)" << endl;
     for (map<int, long unsigned int>::iterator p = gaps.begin(); p != gaps.end(); ++p) {
         cout << p->first << "\t" << p->second << "\t" << (long double) p->second / (long double) alignedBases << endl;
+    }
+
+    cout << endl;
+    cout << "quality histogram of alignmed reads" << endl;
+    cout << "#qual\tcount" << endl;
+    for (map<short, uint64_t>::const_iterator q = qual_hist.begin(); q != qual_hist.end(); ++q) {
+        cout << q->first << "\t" << q->second << endl;
     }
     //cout << endl;
 
