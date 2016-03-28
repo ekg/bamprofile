@@ -67,10 +67,11 @@ void printUsage(int argc, char** argv) {
     cerr << "usage: " << argv[0] << " [-b FILE]" << endl
          << endl
          << "options:" << endl
-         << "    -h, --help         this dialog" << endl
+         << "    -h, --help            this dialog" << endl
          << "    -f, --fasta-reference FILE  the reference sequence" << endl
-         << "    -b, --bam FILE     use this BAM as input (multiple allowed)" << endl
-         << "    -r, --region REGION  limit alignments to those in this region (chr:start..end)" << endl
+         << "    -b, --bam FILE        use this BAM as input (multiple allowed)" << endl
+         << "    -r, --region REGION   limit alignments to those in this region (chr:start..end)" << endl
+         << "    -e, --even-region N   output a samtools-style region delimiting every block of N alignments" << endl
          << endl
          << "Generates reports on the rate of putative mutations or errors in the input alignment data." << endl
          << "Alignments are read from the specified files, or stdin if none are specified" << endl
@@ -150,6 +151,8 @@ int main(int argc, char** argv) {
 
     string fastaFile;
 
+    int32_t even_region = 0;
+
     // parse command-line options
     int c;
 
@@ -161,12 +164,13 @@ int main(int argc, char** argv) {
             {"bam",  required_argument, 0, 'b'},
             {"region", required_argument, 0, 'r'},
             {"fasta-reference", required_argument, 0, 'f'},
+            {"even-region", required_argument, 0, 'e'},
             {0, 0, 0, 0}
         };
         /* getopt_long stores the option index here. */
         int option_index = 0;
 
-        c = getopt_long (argc, argv, "hb:r:f:",
+        c = getopt_long (argc, argv, "hb:r:f:e:",
                          long_options, &option_index);
 
         if (c == -1)
@@ -174,29 +178,33 @@ int main(int argc, char** argv) {
  
         switch (c) {
 
-            case '?':
-                printUsage(argc, argv);
-                return 0;
-                break;
+        case '?':
+            printUsage(argc, argv);
+            return 0;
+            break;
 
-            case 'h':
-                printUsage(argc, argv);
-                return 0;
-                break;
+        case 'h':
+            printUsage(argc, argv);
+            return 0;
+            break;
 
-            case 'b':
-                inputFilenames.push_back(optarg);
-                break;
+        case 'b':
+            inputFilenames.push_back(optarg);
+            break;
 
-            case 'r':
-                regionStr = optarg;
-                break;
+        case 'r':
+            regionStr = optarg;
+            break;
 
-            case 'f':
-                fastaFile = optarg;
-                break;
+        case 'f':
+            fastaFile = optarg;
+            break;
 
-            default:
+        case 'e':
+            even_region = atoi(optarg);
+            break;
+
+        default:
                 return 1;
                 break;
         }
@@ -240,19 +248,19 @@ int main(int argc, char** argv) {
 
     long int lowestReferenceBase = 0;
     long unsigned int referenceBases = 0;
-    unsigned int currentRefSeqID = 0;
+    int currentRefSeqID = -1;
 
     map<short, uint64_t> qual_hist;
+
+    string region_start_seq;
+    int32_t region_start_pos = 0;
+    int32_t region_end_pos = 0;
+    int64_t seen = 0;
 
     BamAlignment al;
     while (reader.GetNextAlignment(al)) {
         if (al.IsMapped()) {
 
-            // record the qualities
-            for (string::iterator c = al.Qualities.begin(); c != al.Qualities.end(); ++c) {
-                ++qual_hist[qualityChar2ShortInt(*c)];
-            }
-            
             long unsigned int endpos = al.GetEndPosition();
             // this happens when we switch reference sequences
             if (currentRefSeqID != al.RefID) {
@@ -260,12 +268,36 @@ int main(int argc, char** argv) {
                 currentRefSeqID = al.RefID;
                 referenceBases += lowestReferenceBase;
                 lowestReferenceBase = 0;
+                if (!region_start_seq.empty()) {
+                    cout << region_start_seq << ":" << region_start_pos << "-" << region_end_pos << endl;
+                }
+                region_start_seq = referenceIDToName[al.RefID];
+                region_start_pos = 0;
+                seen = 0;
             } else if (endpos > lowestReferenceBase) {
                 //cout << "al.GetEndPosition() = " << endpos << "  lowestReferenceBase = " << lowestReferenceBase << "  adding " << endpos - lowestReferenceBase << endl;
                 referenceBases += endpos - lowestReferenceBase;
                 lowestReferenceBase = endpos;
             }
 
+            region_end_pos = al.GetEndPosition();
+
+            if (even_region) {
+                if (++seen > even_region) {
+                    // write the region
+                    cout << region_start_seq << ":" << region_start_pos << "-" << region_end_pos << endl;
+                    region_start_pos = al.Position;
+                    region_end_pos = al.GetEndPosition();
+                    seen = 0;
+                }
+                continue;
+            }
+
+            // record the qualities
+            for (string::iterator c = al.Qualities.begin(); c != al.Qualities.end(); ++c) {
+                ++qual_hist[qualityChar2ShortInt(*c)];
+            }
+            
             //cout << al.Position << endl;
             //cout << al.AlignedBases << endl;
             string refsequence = fr.getSubSequence(referenceIDToName[al.RefID], al.Position, al.GetEndPosition() - (al.Position - 1));
@@ -340,6 +372,11 @@ int main(int argc, char** argv) {
 
     reader.Close();
 
+    if (even_region) {
+        cout << region_start_seq << ":" << region_start_pos << "-" << region_end_pos << endl;        
+        return 0;
+    }
+    
     cout << "reference bases:\t" << referenceBases << endl;
     cout << "total aligned bases:\t" << alignedBases << endl;
     cout << "mean alignment depth:\t" << (long double) alignedBases / (long double) referenceBases << endl;
